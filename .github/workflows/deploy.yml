@@ -34,7 +34,7 @@ jobs:
             -e "s|__TENANT_ID__|${TENANT_ID}|g" \
             -e "s|__CLIENT_ID__|${CLIENT_ID}|g" \
             -e "s|__CLIENT_SECRET__|${CLIENT_SECRET}|g" \
-            demo_notaria.html
+            index.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
