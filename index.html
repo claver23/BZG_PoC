@@ -374,14 +374,18 @@ document.addEventListener('DOMContentLoaded', async function() {
       "¿Qué es un anticipo de herencia?"
     ];
 
+    var THREAD_KEY = "bz_thread_id";
+
     async function askBetty(message) {
+      var previousResponseId = localStorage.getItem(THREAD_KEY) || null;
       var r = await fetch(FUNCTION_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: message })
+        body: JSON.stringify({ message: message, previousResponseId: previousResponseId })
       });
       if (!r.ok) throw new Error("Error " + r.status);
       var d = await r.json();
+      if (d.responseId) localStorage.setItem(THREAD_KEY, d.responseId);
       return d.reply || "(Sin respuesta)";
     }
 
@@ -492,21 +496,12 @@ document.addEventListener('DOMContentLoaded', async function() {
         return el;
       }
 
-      // Welcome message: typewriter only on first visit
+      // Welcome message: el texto se muestra siempre; typewriter al primer OPEN
       var WELCOME_KEY = "bz_welcomed";
       var welcomeText = "\u00a1Hola! Soy Betty, tu asistente notarial de la Notar\u00eda Beatriz Zevallos. \u00bfEn qu\u00e9 tr\u00e1mite puedo ayudarte hoy?";
       var welcomeEl = addMsg("", "assistant", false);
-      if (!localStorage.getItem(WELCOME_KEY)) {
-        localStorage.setItem(WELCOME_KEY, "1");
-        var wi = 0;
-        (function wTick(){
-          wi++;
-          welcomeEl.textContent = welcomeText.slice(0, wi);
-          if (wi < welcomeText.length) setTimeout(wTick, 22);
-        })();
-      } else {
-        welcomeEl.textContent = welcomeText;
-      }
+      var welcomePlayed = !!localStorage.getItem(WELCOME_KEY);
+      if (welcomePlayed) welcomeEl.textContent = welcomeText;
 
       // Quick questions chips
       var chips = document.createElement("div");
@@ -661,6 +656,17 @@ document.addEventListener('DOMContentLoaded', async function() {
           });
           btn.className = ""; // stop pulse while open
           btn.style.transform = "rotate(45deg) scale(1.05)";
+          // Typewriter on very first open
+          if (!welcomePlayed) {
+            welcomePlayed = true;
+            localStorage.setItem(WELCOME_KEY, "1");
+            var wi = 0;
+            (function wTick(){
+              wi++;
+              welcomeEl.textContent = welcomeText.slice(0, wi);
+              if (wi < welcomeText.length) setTimeout(wTick, 22);
+            })();
+          }
           setTimeout(function() { inp.focus(); }, 220);
         } else {
           closeChat();
