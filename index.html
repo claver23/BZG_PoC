@@ -363,145 +363,165 @@ document.addEventListener('DOMContentLoaded', async function() {
     console.error('Bundle unpack error:', err);
   }
 
-  // ── Betty · Azure AI Foundry ──────────────────────────────────────────────
-  // Credentials are injected by GitHub Actions at deploy time (repository secrets)
-  // Required: configure CORS on Azure AI Foundry to allow your GitHub Pages origin
+  // ── Betty · Azure Function ────────────────────────────────────────────────
   (function initBetty() {
-    var TENANT_ID     = "__TENANT_ID__";
-    var CLIENT_ID     = "__CLIENT_ID__";
-    var CLIENT_SECRET = "__CLIENT_SECRET__";
-    var ENDPOINT      = "https://moebiusfoundry.services.ai.azure.com/api/projects/proj-moebius";
-    var AGENT_NAME    = "Betty";
-    var AGENT_VERSION = "2";
-    var API_VER       = "2025-05-01-preview";
+    var FUNCTION_URL = "https://webchat-bz-f0c4bjgmhzhsh9ge.eastus2-01.azurewebsites.net/api/chat";
 
-    var _tok = null, _tokExp = 0;
-
-    async function getToken() {
-      if (_tok && Date.now() < _tokExp) return _tok;
-      var r = await fetch(
-        "https://login.microsoftonline.com/" + TENANT_ID + "/oauth2/v2.0/token",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            grant_type:    "client_credentials",
-            client_id:     CLIENT_ID,
-            client_secret: CLIENT_SECRET,
-            scope:         "https://cognitiveservices.azure.com/.default"
-          })
-        }
-      );
-      if (!r.ok) throw new Error("Auth HTTP " + r.status);
-      var d = await r.json();
-      _tok    = d.access_token;
-      _tokExp = Date.now() + (d.expires_in - 60) * 1000;
-      return _tok;
-    }
+    var QUICK_QUESTIONS = [
+      "¿Qué servicios notariales ofrecen?",
+      "¿Cómo tramitar una escritura de compraventa?",
+      "¿Qué necesito para hacer un testamento?",
+      "¿Cómo tramitar una herencia?",
+      "¿Qué es un poder notarial y cómo se obtiene?",
+      "¿Cuánto cuesta autenticar un documento?"
+    ];
 
     async function askBetty(message) {
-      var token = await getToken();
-      var h = { "Authorization": "Bearer " + token, "Content-Type": "application/json" };
-      var qs = "?api-version=" + API_VER;
-
-      // 1 · Create conversation with the user message
-      var cRes = await fetch(ENDPOINT + "/openai/v1/conversations" + qs, {
-        method: "POST", headers: h,
-        body: JSON.stringify({ items: [{ type: "message", role: "user", content: message }] })
+      var r = await fetch(FUNCTION_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: message })
       });
-      if (!cRes.ok) throw new Error("Conv " + cRes.status + ": " + await cRes.text());
-      var conv = await cRes.json();
+      if (!r.ok) throw new Error("Error " + r.status);
+      var d = await r.json();
+      return d.reply || "(Sin respuesta)";
+    }
 
-      // 2 · Generate response using the Betty agent
-      var rRes = await fetch(ENDPOINT + "/openai/v1/responses" + qs, {
-        method: "POST", headers: h,
-        body: JSON.stringify({
-          conversation: conv.id,
-          agent: { name: AGENT_NAME, version: AGENT_VERSION, type: "agent_reference" }
-        })
-      });
-      if (!rRes.ok) throw new Error("Resp " + rRes.status + ": " + await rRes.text());
-      var resp = await rRes.json();
-      return resp.output_text
-        || (resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content)
-        || "(Sin respuesta de Betty)";
+    // Minimal markdown: bold, line breaks
+    function renderMarkdown(text, el) {
+      el.innerHTML = "";
+      var html = text
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*(.+?)\*/g, "<em>$1</em>")
+        .replace(/\n\n/g, "</p><p>")
+        .replace(/\n/g, "<br>");
+      el.innerHTML = "<p>" + html + "</p>";
     }
 
     function buildWidget() {
       var BG = "#123a2b", GOLD = "#d9c17a", LIGHT = "#f5f2ea", MBUBBLE = "#e8e4d8";
+
+      // Inject CSS animation for typing dots
+      var styleEl = document.createElement("style");
+      styleEl.textContent =
+        "@keyframes bzDot{0%,80%,100%{transform:translateY(0);opacity:.4}40%{transform:translateY(-5px);opacity:1}}" +
+        ".bz-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#888;margin:0 2px;animation:bzDot 1.2s infinite}" +
+        ".bz-dot:nth-child(2){animation-delay:.2s}.bz-dot:nth-child(3){animation-delay:.4s}" +
+        ".bz-bubble p{margin:0 0 6px}.bz-bubble p:last-child{margin:0}" +
+        ".bz-chip:hover{background:" + BG + "!important;color:#fff!important;border-color:" + BG + "!important}";
+      document.head.appendChild(styleEl);
 
       // ── Toggle button ──────────────────────────────────────────────────────
       var btn = document.createElement("button");
       btn.setAttribute("aria-label", "Abrir chat con Betty");
       btn.style.cssText =
         "position:fixed;bottom:24px;right:24px;z-index:9998;" +
-        "width:56px;height:56px;border-radius:50%;border:none;" +
-        "background:" + BG + ";box-shadow:0 4px 16px rgba(0,0,0,.28);" +
+        "width:60px;height:60px;border-radius:50%;border:none;" +
+        "background:" + BG + ";box-shadow:0 6px 20px rgba(0,0,0,.32);" +
         "cursor:pointer;display:flex;align-items:center;justify-content:center;" +
-        "transition:transform .25s,box-shadow .2s;padding:0";
+        "transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .2s;padding:0";
       btn.innerHTML =
-        '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 32 32">' +
         '<circle cx="16" cy="16" r="16" fill="' + GOLD + '"/>' +
         '<text x="16" y="21" text-anchor="middle" font-family="Georgia,serif"' +
         ' font-weight="700" font-size="13" fill="' + BG + '">BZ</text></svg>';
+      btn.addEventListener("mouseenter", function(){ this.style.boxShadow="0 8px 28px rgba(0,0,0,.38)"; });
+      btn.addEventListener("mouseleave", function(){ this.style.boxShadow="0 6px 20px rgba(0,0,0,.32)"; });
 
       // ── Chat window ────────────────────────────────────────────────────────
       var win = document.createElement("div");
       win.setAttribute("role", "dialog");
       win.setAttribute("aria-label", "Chat con Betty");
       win.style.cssText =
-        "position:fixed;bottom:92px;right:24px;z-index:9997;" +
-        "width:360px;max-height:520px;display:none;flex-direction:column;" +
-        "background:#fff;border-radius:16px;overflow:hidden;" +
-        "box-shadow:0 8px 32px rgba(0,0,0,.22);" +
+        "position:fixed;bottom:96px;right:24px;z-index:9997;" +
+        "width:380px;max-height:560px;display:none;flex-direction:column;" +
+        "background:#fff;border-radius:20px;overflow:hidden;" +
+        "box-shadow:0 12px 40px rgba(0,0,0,.24);transform:scale(.96) translateY(8px);" +
+        "opacity:0;transition:opacity .22s ease,transform .22s cubic-bezier(.34,1.56,.64,1);" +
         "font-family:-apple-system,BlinkMacSystemFont,'Public Sans',sans-serif";
 
+      // Header
       var hdr = document.createElement("div");
       hdr.style.cssText =
-        "background:" + BG + ";color:" + GOLD + ";padding:14px 18px;" +
-        "font-weight:700;font-size:15px;display:flex;align-items:center;gap:10px;flex-shrink:0";
+        "background:linear-gradient(135deg," + BG + " 0%,#1e5c3f 100%);" +
+        "color:" + GOLD + ";padding:16px 18px;" +
+        "display:flex;align-items:center;gap:12px;flex-shrink:0;" +
+        "box-shadow:0 2px 8px rgba(0,0,0,.15)";
       hdr.innerHTML =
-        '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">' +
-        '<rect width="32" height="32" rx="8" fill="' + GOLD + '"/>' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 32 32">' +
+        '<rect width="32" height="32" rx="10" fill="' + GOLD + '"/>' +
         '<text x="16" y="21" text-anchor="middle" font-family="Georgia,serif"' +
         ' font-weight="700" font-size="13" fill="' + BG + '">BZ</text></svg>' +
-        '<span>Betty \u00b7 Asistente Notarial</span>';
+        '<div><div style="font-weight:700;font-size:15px">Betty</div>' +
+        '<div style="font-size:11px;opacity:.75;font-weight:400;margin-top:1px">Asistente Notarial &middot; En l&iacute;nea</div></div>' +
+        '<div style="margin-left:auto;width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 2px rgba(74,222,128,.3)"></div>';
 
+      // Messages area
       var msgs = document.createElement("div");
       msgs.style.cssText =
-        "flex:1;overflow-y:auto;padding:16px 14px;" +
-        "display:flex;flex-direction:column;gap:10px;background:" + LIGHT;
+        "flex:1;overflow-y:auto;padding:16px 14px 8px;" +
+        "display:flex;flex-direction:column;gap:8px;background:" + LIGHT + ";" +
+        "scroll-behavior:smooth";
 
-      function addMsg(text, role) {
+      function addMsg(text, role, isHtml) {
+        var wrap = document.createElement("div");
+        wrap.style.cssText = "display:flex;flex-direction:column;" + (role === "user" ? "align-items:flex-end" : "align-items:flex-start");
         var el = document.createElement("div");
         var isUser = role === "user";
+        el.className = "bz-bubble";
         el.style.cssText =
-          "max-width:85%;padding:10px 14px;word-wrap:break-word;" +
-          "font-size:14px;line-height:1.55;" +
-          "border-radius:" + (isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px") + ";" +
+          "max-width:86%;padding:10px 14px;word-wrap:break-word;" +
+          "font-size:13.5px;line-height:1.6;" +
+          "border-radius:" + (isUser ? "18px 18px 5px 18px" : "18px 18px 18px 5px") + ";" +
           (isUser
-            ? "background:" + BG + ";color:#fff;align-self:flex-end"
-            : "background:" + MBUBBLE + ";color:#1a1a1a;align-self:flex-start");
-        el.textContent = text;
-        msgs.appendChild(el);
+            ? "background:" + BG + ";color:#fff;box-shadow:0 2px 8px rgba(18,58,43,.22)"
+            : "background:#fff;color:#1a1a1a;box-shadow:0 1px 4px rgba(0,0,0,.1);border:1px solid #e8e3d8");
+        if (isHtml) { renderMarkdown(text, el); } else { el.textContent = text; }
+        wrap.appendChild(el);
+        msgs.appendChild(wrap);
         msgs.scrollTop = msgs.scrollHeight;
         return el;
       }
+
+      // Welcome message
       addMsg("\u00bfEn qu\u00e9 tr\u00e1mite notarial puedo ayudarte hoy?", "assistant");
 
+      // Quick questions chips
+      var chips = document.createElement("div");
+      chips.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 12px;background:" + LIGHT;
+      QUICK_QUESTIONS.forEach(function(q) {
+        var c = document.createElement("button");
+        c.className = "bz-chip";
+        c.textContent = q;
+        c.style.cssText =
+          "font-size:11.5px;padding:5px 10px;border-radius:14px;border:1px solid " + GOLD + ";" +
+          "background:#fff;color:" + BG + ";cursor:pointer;transition:all .18s;font-family:inherit;" +
+          "white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis";
+        c.addEventListener("click", function() {
+          chips.style.display = "none";
+          doSend(q);
+        });
+        chips.appendChild(c);
+      });
+
+      // Input row
       var row = document.createElement("div");
       row.style.cssText =
-        "display:flex;gap:8px;padding:10px 12px;" +
-        "border-top:1px solid #e4dfd4;background:#fff;flex-shrink:0";
+        "display:flex;align-items:flex-end;gap:8px;padding:10px 12px 12px;" +
+        "border-top:1px solid #e8e3d8;background:#fff;flex-shrink:0";
 
       var inp = document.createElement("textarea");
       inp.placeholder = "Escribe tu consulta\u2026";
       inp.rows = 1;
       inp.setAttribute("aria-label", "Mensaje para Betty");
       inp.style.cssText =
-        "flex:1;border:1px solid #ccc8be;border-radius:20px;" +
-        "padding:8px 14px;font-size:14px;resize:none;outline:none;" +
-        "background:" + LIGHT + ";font-family:inherit;max-height:96px;line-height:1.4;overflow-y:auto";
+        "flex:1;border:1.5px solid #d4cfC5;border-radius:22px;" +
+        "padding:9px 15px;font-size:13.5px;resize:none;outline:none;" +
+        "background:" + LIGHT + ";font-family:inherit;max-height:96px;line-height:1.45;" +
+        "overflow-y:auto;transition:border-color .15s";
+      inp.addEventListener("focus", function(){ this.style.borderColor=GOLD; });
+      inp.addEventListener("blur",  function(){ this.style.borderColor="#d4cfc5"; });
       inp.addEventListener("input", function () {
         this.style.height = "auto";
         this.style.height = Math.min(this.scrollHeight, 96) + "px";
@@ -512,37 +532,59 @@ document.addEventListener('DOMContentLoaded', async function() {
       sendBtn.style.cssText =
         "width:40px;height:40px;flex-shrink:0;border-radius:50%;border:none;" +
         "background:" + BG + ";color:" + GOLD + ";cursor:pointer;" +
-        "display:flex;align-items:center;justify-content:center;transition:opacity .15s";
+        "display:flex;align-items:center;justify-content:center;" +
+        "transition:opacity .15s,transform .15s;margin-bottom:1px";
       sendBtn.innerHTML =
-        '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24"' +
         ' fill="none" stroke="currentColor" stroke-width="2.5"' +
         ' stroke-linecap="round" stroke-linejoin="round">' +
         '<line x1="22" y1="2" x2="11" y2="13"/>' +
         '<polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
+      sendBtn.addEventListener("mouseenter", function(){ this.style.transform="scale(1.1)"; });
+      sendBtn.addEventListener("mouseleave", function(){ this.style.transform=""; });
 
-      async function doSend() {
-        var text = inp.value.trim();
+      async function doSend(overrideText) {
+        var text = (overrideText || inp.value).trim();
         if (!text || inp.disabled) return;
         inp.value = "";
         inp.style.height = "auto";
         inp.disabled = true;
         sendBtn.disabled = true;
-        sendBtn.style.opacity = "0.4";
+        sendBtn.style.opacity = "0.35";
+        chips.style.display = "none";
 
         addMsg(text, "user");
-        var typing = addMsg("Betty est\u00e1 escribiendo\u2026", "assistant");
-        typing.style.fontStyle = "italic";
-        typing.style.opacity = "0.55";
+
+        // Typing indicator
+        var typingWrap = document.createElement("div");
+        typingWrap.style.cssText = "display:flex;align-items:flex-start";
+        var typingEl = document.createElement("div");
+        typingEl.style.cssText =
+          "padding:12px 16px;background:#fff;border-radius:18px 18px 18px 5px;" +
+          "box-shadow:0 1px 4px rgba(0,0,0,.1);border:1px solid #e8e3d8";
+        typingEl.innerHTML =
+          '<span class="bz-dot"></span><span class="bz-dot"></span><span class="bz-dot"></span>';
+        typingWrap.appendChild(typingEl);
+        msgs.appendChild(typingWrap);
+        msgs.scrollTop = msgs.scrollHeight;
 
         try {
           var reply = await askBetty(text);
-          typing.textContent = reply;
-          typing.style.fontStyle = "";
-          typing.style.opacity = "";
+          msgs.removeChild(typingWrap);
+          var replyEl = addMsg(reply, "assistant", true);
+          // Fade-in effect
+          replyEl.parentElement.style.opacity = "0";
+          replyEl.parentElement.style.transition = "opacity .3s ease";
+          requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+              replyEl.parentElement.style.opacity = "1";
+            });
+          });
         } catch (err) {
-          typing.textContent = "\u26a0\ufe0f " + err.message;
-          typing.style.color = "#c0392b";
-          typing.style.opacity = "";
+          msgs.removeChild(typingWrap);
+          var errEl = addMsg("\u26a0\ufe0f Ocurri\u00f3 un error. Por favor intenta de nuevo.", "assistant");
+          errEl.style.background = "#fff0f0";
+          errEl.style.borderColor = "#fca5a5";
         } finally {
           inp.disabled = false;
           sendBtn.disabled = false;
@@ -551,7 +593,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
       }
 
-      sendBtn.addEventListener("click", doSend);
+      sendBtn.addEventListener("click", function(){ doSend(); });
       inp.addEventListener("keydown", function (e) {
         if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doSend(); }
       });
@@ -560,21 +602,32 @@ document.addEventListener('DOMContentLoaded', async function() {
       row.appendChild(sendBtn);
       win.appendChild(hdr);
       win.appendChild(msgs);
+      win.appendChild(chips);
       win.appendChild(row);
 
       var isOpen = false;
       btn.addEventListener("click", function () {
         isOpen = !isOpen;
-        win.style.display = isOpen ? "flex" : "none";
-        btn.style.transform = isOpen ? "rotate(45deg)" : "";
-        if (isOpen) setTimeout(function() { inp.focus(); }, 50);
+        if (isOpen) {
+          win.style.display = "flex";
+          requestAnimationFrame(function() {
+            win.style.opacity = "1";
+            win.style.transform = "scale(1) translateY(0)";
+          });
+          btn.style.transform = "rotate(45deg) scale(1.05)";
+          setTimeout(function() { inp.focus(); }, 220);
+        } else {
+          win.style.opacity = "0";
+          win.style.transform = "scale(.96) translateY(8px)";
+          btn.style.transform = "";
+          setTimeout(function() { win.style.display = "none"; }, 220);
+        }
       });
 
       document.body.appendChild(win);
       document.body.appendChild(btn);
     }
 
-    // Wait for React to finish rendering the app before injecting the widget
     setTimeout(buildWidget, 200);
   })();
 
