@@ -439,7 +439,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       win.setAttribute("aria-label", "Chat con Betty");
       win.style.cssText =
         "position:fixed;bottom:96px;right:24px;z-index:9997;" +
-        "width:420px;max-height:580px;display:none;flex-direction:column;" +
+        "width:460px;max-height:480px;display:none;flex-direction:column;" +
         "background:#f7f5f0;border-radius:20px;overflow:hidden;" +
         "box-shadow:0 16px 48px rgba(0,0,0,.28);transform:scale(.96) translateY(8px);" +
         "opacity:0;transition:opacity .22s ease,transform .22s cubic-bezier(.34,1.56,.64,1);" +
@@ -459,7 +459,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         ' font-weight="700" font-size="13" fill="' + BG + '">BZ</text></svg>' +
         '<div><div style="font-weight:700;font-size:15px">Betty</div>' +
         '<div style="font-size:11px;opacity:.75;font-weight:400;margin-top:1px">Asistente Notarial &middot; En l&iacute;nea</div></div>' +
-        '<div style="margin-left:auto;width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 2px rgba(74,222,128,.3)"></div>';
+        '<div style="margin-left:auto;display:flex;align-items:center;gap:10px">' +
+        '<div style="width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 2px rgba(74,222,128,.3)"></div>' +
+        '<button id="bz-close" aria-label="Cerrar chat" style="background:none;border:none;cursor:pointer;color:' + GOLD + ';opacity:.7;display:flex;align-items:center;padding:2px;border-radius:4px;transition:opacity .15s" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=.7">' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+        '</button></div>';
 
       // Messages area
       var msgs = document.createElement("div");
@@ -488,15 +492,21 @@ document.addEventListener('DOMContentLoaded', async function() {
         return el;
       }
 
-      // Welcome message with typewriter on the greeting
-      var welcomeEl = addMsg("", "assistant", false);
+      // Welcome message: typewriter only on first visit
+      var WELCOME_KEY = "bz_welcomed";
       var welcomeText = "\u00a1Hola! Soy Betty, tu asistente notarial de la Notar\u00eda Beatriz Zevallos. \u00bfEn qu\u00e9 tr\u00e1mite puedo ayudarte hoy?";
-      var wi = 0;
-      (function wTick(){
-        wi++;
-        welcomeEl.textContent = welcomeText.slice(0, wi);
-        if (wi < welcomeText.length) setTimeout(wTick, 22);
-      })();
+      var welcomeEl = addMsg("", "assistant", false);
+      if (!localStorage.getItem(WELCOME_KEY)) {
+        localStorage.setItem(WELCOME_KEY, "1");
+        var wi = 0;
+        (function wTick(){
+          wi++;
+          welcomeEl.textContent = welcomeText.slice(0, wi);
+          if (wi < welcomeText.length) setTimeout(wTick, 22);
+        })();
+      } else {
+        welcomeEl.textContent = welcomeText;
+      }
 
       // Quick questions chips
       var chips = document.createElement("div");
@@ -631,6 +641,15 @@ document.addEventListener('DOMContentLoaded', async function() {
       win.appendChild(chips);
       win.appendChild(row);
 
+      function closeChat() {
+        isOpen = false;
+        win.style.opacity = "0";
+        win.style.transform = "scale(.96) translateY(8px)";
+        btn.style.transform = "";
+        btn.className = "bz-btn-idle";
+        setTimeout(function() { win.style.display = "none"; }, 220);
+      }
+
       var isOpen = false;
       btn.addEventListener("click", function () {
         isOpen = !isOpen;
@@ -644,12 +663,18 @@ document.addEventListener('DOMContentLoaded', async function() {
           btn.style.transform = "rotate(45deg) scale(1.05)";
           setTimeout(function() { inp.focus(); }, 220);
         } else {
-          win.style.opacity = "0";
-          win.style.transform = "scale(.96) translateY(8px)";
-          btn.style.transform = "";
-          btn.className = "bz-btn-idle"; // resume pulse
-          setTimeout(function() { win.style.display = "none"; }, 220);
+          closeChat();
         }
+      });
+
+      // Close on X button click
+      hdr.addEventListener("click", function(e) {
+        if (e.target.closest("#bz-close")) closeChat();
+      });
+
+      // Close on click outside
+      document.addEventListener("click", function(e) {
+        if (isOpen && !win.contains(e.target) && !btn.contains(e.target)) closeChat();
       });
 
       document.body.appendChild(win);
