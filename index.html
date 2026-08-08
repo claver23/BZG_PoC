@@ -439,9 +439,9 @@ document.addEventListener('DOMContentLoaded', async function() {
       win.setAttribute("aria-label", "Chat con Betty");
       win.style.cssText =
         "position:fixed;bottom:96px;right:24px;z-index:9997;" +
-        "width:380px;max-height:560px;display:none;flex-direction:column;" +
-        "background:#fff;border-radius:20px;overflow:hidden;" +
-        "box-shadow:0 12px 40px rgba(0,0,0,.24);transform:scale(.96) translateY(8px);" +
+        "width:420px;max-height:580px;display:none;flex-direction:column;" +
+        "background:#f7f5f0;border-radius:20px;overflow:hidden;" +
+        "box-shadow:0 16px 48px rgba(0,0,0,.28);transform:scale(.96) translateY(8px);" +
         "opacity:0;transition:opacity .22s ease,transform .22s cubic-bezier(.34,1.56,.64,1);" +
         "font-family:-apple-system,BlinkMacSystemFont,'Public Sans',sans-serif";
 
@@ -475,12 +475,12 @@ document.addEventListener('DOMContentLoaded', async function() {
         var isUser = role === "user";
         el.className = "bz-bubble";
         el.style.cssText =
-          "max-width:86%;padding:10px 14px;word-wrap:break-word;" +
-          "font-size:13.5px;line-height:1.6;" +
+          "max-width:82%;padding:12px 16px;word-wrap:break-word;" +
+          "font-size:14px;line-height:1.65;" +
           "border-radius:" + (isUser ? "18px 18px 5px 18px" : "18px 18px 18px 5px") + ";" +
           (isUser
-            ? "background:" + BG + ";color:#fff;box-shadow:0 2px 8px rgba(18,58,43,.22)"
-            : "background:#fff;color:#1a1a1a;box-shadow:0 1px 4px rgba(0,0,0,.1);border:1px solid #e8e3d8");
+            ? "background:" + BG + ";color:#fff;box-shadow:0 3px 12px rgba(18,58,43,.3)"
+            : "background:#fff;color:#1a1a1a;box-shadow:0 2px 8px rgba(0,0,0,.12);border:1px solid #e2ddd5");
         if (isHtml) { renderMarkdown(text, el); } else { el.textContent = text; }
         wrap.appendChild(el);
         msgs.appendChild(wrap);
@@ -488,8 +488,15 @@ document.addEventListener('DOMContentLoaded', async function() {
         return el;
       }
 
-      // Welcome message
-      addMsg("\u00bfEn qu\u00e9 tr\u00e1mite notarial puedo ayudarte hoy?", "assistant");
+      // Welcome message with typewriter on the greeting
+      var welcomeEl = addMsg("", "assistant", false);
+      var welcomeText = "\u00a1Hola! Soy Betty, tu asistente notarial de la Notar\u00eda Beatriz Zevallos. \u00bfEn qu\u00e9 tr\u00e1mite puedo ayudarte hoy?";
+      var wi = 0;
+      (function wTick(){
+        wi++;
+        welcomeEl.textContent = welcomeText.slice(0, wi);
+        if (wi < welcomeText.length) setTimeout(wTick, 22);
+      })();
 
       // Quick questions chips
       var chips = document.createElement("div");
