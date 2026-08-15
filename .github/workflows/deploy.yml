@@ -24,18 +24,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Inject Betty credentials into demo
-        env:
-          TENANT_ID:     ${{ secrets.BETTY_TENANT_ID }}
-          CLIENT_ID:     ${{ secrets.BETTY_CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.BETTY_CLIENT_SECRET }}
-        run: |
-          sed -i \
-            -e "s|__TENANT_ID__|${TENANT_ID}|g" \
-            -e "s|__CLIENT_ID__|${CLIENT_ID}|g" \
-            -e "s|__CLIENT_SECRET__|${CLIENT_SECRET}|g" \
-            index.html
-
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
