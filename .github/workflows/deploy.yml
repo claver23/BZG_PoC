@@ -24,6 +24,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 🔥 PASO NUEVO: Inyectar los secretos en un archivo JS de configuración
+      - name: Inject environment variables
+        run: |
+          echo "// Archivo generado automáticamente por GitHub Actions" > env-config.js
+          echo "window.__ENV__ = {" >> env-config.js
+          echo "  MOEBIUS_BZG_AGENT_URL: '${{ secrets.MOEBIUS_BZG_AGENT_URL }}'," >> env-config.js
+          echo "  MOEBIUS_BZG_MODEL_APIKEY: '${{ secrets.MOEBIUS_BZG_MODEL_APIKEY }}'" >> env-config.js
+          echo "};" >> env-config.js
+        shell: bash
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
